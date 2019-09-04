@@ -8,8 +8,9 @@
 #define VOX_WIDTH 128 // Must be a power of 2
 #define VOX_PADDING 8
 
-#define VOX_SPRITE_COUNT 512
+#define VOX_SPRITES_COUNT 16
 #define VOX_SPRITE_WIDTH 8
+#define VOX_SPRITES_WIDTH (VOX_SPRITES_COUNT * VOX_SPRITE_WIDTH)
 
 namespace {
 
@@ -17,9 +18,9 @@ typedef struct {
   uint8_t r;
   uint8_t g;
   uint8_t b;
-} Color;
+} RGB;
 
-Color palette[] = {
+RGB palette[] = {
     {0, 0, 0},       // 0:  Black
     {29, 43, 83},    // 1:  Dark blue
     {126, 37, 83},   // 2:  Dark blue
@@ -38,11 +39,10 @@ Color palette[] = {
     {255, 204, 170}, // 15: Peach
 };
 
-double update_rate = 60;
-int64_t designed_frametime = SDL_GetPerformanceFrequency() / update_rate;
-
-uint8_t screen[VOX_WIDTH][VOX_WIDTH];
-uint8_t sprites[VOX_SPRITE_COUNT][VOX_SPRITE_WIDTH][VOX_SPRITE_WIDTH];
+uint32_t *sprites;
+SDL_Texture *sprites_texture;
+SDL_PixelFormat *pixel_format;
+SDL_Renderer *renderer;
 
 double color_distance(int r1, int g1, int b1, int r2, int g2, int b2) {
   double dr = static_cast<double>(r1 - r2) * 0.30;
@@ -51,18 +51,18 @@ double color_distance(int r1, int g1, int b1, int r2, int g2, int b2) {
   return dr * dr + dg * dg + db * db;
 }
 
-uint8_t find_closest_color(int r, int g, int b) {
+RGB find_closest_color(int r, int g, int b) {
   uint8_t c = 0;
   double min_dist = color_distance(r, g, b, 0, 0, 0);
   for (uint8_t i = 1; i < 16; ++i) {
-    Color p = palette[i];
+    RGB p = palette[i];
     double dist = color_distance(r, g, b, p.r, p.g, p.b);
     if (dist < min_dist) {
       c = i;
       min_dist = dist;
     }
   }
-  return c;
+  return palette[c];
 }
 
 SDL_PixelFormat *best_pixel_format(const SDL_RendererInfo *renderer_info) {
@@ -125,35 +125,50 @@ int import_sprites(const char *filename, int pos) {
     int oy = n * VOX_SPRITE_WIDTH * w * j;
     for (int i = 0; i < sw; ++i) {
       int ox = n * VOX_SPRITE_WIDTH * i;
+      uint8_t *src = data + ox + oy;
+      int px = pos % VOX_SPRITES_COUNT;
+      int py = pos / VOX_SPRITES_COUNT;
+      uint32_t *dst = sprites + py * VOX_SPRITES_WIDTH * VOX_SPRITE_WIDTH +
+                      px * VOX_SPRITE_WIDTH;
       for (int y = 0; y < VOX_SPRITE_WIDTH; y++) {
         for (int x = 0; x < VOX_SPRITE_WIDTH; x++) {
-          uint8_t *p = &data[ox + oy + n * y * w + n * x];
-          sprites[pos][x][y] = find_closest_color(p[0], p[1], p[2]);
+          uint8_t *p = &src[n * y * w + n * x];
+          RGB c = find_closest_color(p[0], p[1], p[2]);
+          dst[y * VOX_SPRITES_WIDTH + x] =
+              SDL_MapRGBA(pixel_format, c.r, c.g, c.b, 255);
         }
       }
       pos++;
-      assert(pos < VOX_SPRITE_COUNT && "Using too many sprites");
     }
   }
+
+  SDL_UpdateTexture(sprites_texture, NULL, sprites,
+                    VOX_SPRITES_WIDTH * sizeof(uint32_t));
 
   return pos;
 }
 
 void cls(uint8_t col = 0) {
-  for (int i = 0; i < VOX_WIDTH; ++i) {
-    for (int j = 0; j < VOX_WIDTH; ++j) {
-      screen[i][j] = col;
-    }
-  }
+  RGB c = palette[col];
+  SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 0x00);
+  SDL_RenderClear(renderer);
 }
 
 void spr(int n, int x, int y, int w = VOX_SPRITE_WIDTH,
          int h = VOX_SPRITE_WIDTH) {
-  for (int i = 0; i < w; ++i) {
-    for (int j = 0; j < h; ++j) {
-      screen[x + i][y + j] = sprites[n][i][j];
-    }
-  }
+  SDL_Rect src;
+  src.x = (n % VOX_SPRITES_COUNT) * VOX_SPRITES_WIDTH * VOX_SPRITE_WIDTH;
+  src.y = (n / VOX_SPRITES_COUNT) * VOX_SPRITE_WIDTH;
+  src.w = VOX_SPRITE_WIDTH;
+  src.h = VOX_SPRITE_WIDTH;
+
+  SDL_Rect dst;
+  dst.x = x;
+  dst.y = y;
+  dst.w = VOX_SPRITE_WIDTH;
+  dst.h = VOX_SPRITE_WIDTH;
+
+  SDL_RenderCopy(renderer, sprites_texture, &src, &dst);
 }
 
 void print(const char *str, int x, int y) {
@@ -167,10 +182,9 @@ void print(const char *str, int x, int y) {
 
 int main(int argc, char *argv[]) {
   SDL_Window *window;
-  SDL_Renderer *renderer;
   SDL_RendererInfo renderer_info;
-  SDL_Texture *texture;
   SDL_Event event;
+  SDL_Texture *texture;
 
   int32_t width = 800, height = 800;
 
@@ -193,28 +207,29 @@ int main(int argc, char *argv[]) {
     return 3;
   }
 
-  SDL_PixelFormat *pixel_format = best_pixel_format(&renderer_info);
+  pixel_format = best_pixel_format(&renderer_info);
 
   SDL_Log("Using pixel format: %s",
           SDL_GetPixelFormatName(pixel_format->format));
 
-  int pos = 0;
-  pos = import_sprites("pico8_font.png", pos);
-  import_sprites("sprites1.png", pos);
+  sprites_texture = SDL_CreateTexture(renderer, pixel_format->format,
+                                      SDL_TEXTUREACCESS_STATIC,
+                                      VOX_SPRITES_WIDTH, VOX_SPRITES_WIDTH);
 
-  texture = SDL_CreateTexture(renderer, pixel_format->format,
-                              SDL_TEXTUREACCESS_STATIC, VOX_WIDTH, VOX_WIDTH);
+  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                              SDL_TEXTUREACCESS_TARGET, VOX_WIDTH, VOX_WIDTH);
 
   // TODO: Allocate properly based on the best format
-  uint32_t *pixels = new uint32_t[VOX_WIDTH * VOX_WIDTH];
+  sprites = new uint32_t[VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH];
 
-  memset(pixels, 255, VOX_WIDTH * VOX_WIDTH * sizeof(uint32_t));
+  memset(sprites, 255,
+         VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH * sizeof(uint32_t));
+
+  int pos = 0;
+  pos = import_sprites("pico8_font.png", pos);
+  // import_sprites("sprites1.png", pos);
 
   SDL_Rect screen_rect = calc_screen_rect(width, height);
-
-  cls();
-  print("hi my name is mike", 64, 0);
-  spr(pos + 80, 0, 0);
 
   while (1) {
     SDL_PollEvent(&event);
@@ -231,15 +246,15 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    for (int x = 0; x < VOX_WIDTH; ++x) {
-      for (int y = 0; y < VOX_WIDTH; ++y) {
-        Color color = palette[screen[x][y]];
-        pixels[y * VOX_WIDTH + x] =
-            SDL_MapRGBA(pixel_format, color.r, color.g, color.b, 255);
-      }
+    SDL_SetRenderTarget(renderer, texture);
+    cls(8);
+
+    for (int i = 0; i < 1000; ++i) {
+      spr(48, rand() % 128, rand() % 128);
     }
 
-    SDL_UpdateTexture(texture, NULL, pixels, VOX_WIDTH * sizeof(uint32_t));
+    SDL_SetRenderTarget(renderer, NULL);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, &screen_rect);
     SDL_RenderPresent(renderer);
