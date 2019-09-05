@@ -21,28 +21,28 @@ typedef struct {
 } RGB;
 
 RGB palette[] = {
-    {0, 0, 0},       // 0:  Black
-    {29, 43, 83},    // 1:  Dark blue
-    {126, 37, 83},   // 2:  Dark blue
-    {0, 135, 81},    // 3:  Dark grean
-    {171, 82, 54},   // 4:  Brown
-    {95, 87, 79},    // 5:  Dark gray
-    {194, 195, 199}, // 6:  Light gray
-    {255, 241, 232}, // 7:  White
-    {255, 0, 77},    // 8:  Red
-    {255, 163, 0},   // 9:  Orange
-    {255, 236, 39},  // 10: Yellow
-    {0, 228, 54},    // 11: Green
-    {41, 173, 255},  // 12: Blue
-    {131, 118, 156}, // 13: Indigo
-    {255, 119, 168}, // 14: Pink
-    {255, 204, 170}, // 15: Peach
+  { 0, 0, 0 },       // 0:  Black
+  { 29, 43, 83 },    // 1:  Dark blue
+  { 126, 37, 83 },   // 2:  Dark blue
+  { 0, 135, 81 },    // 3:  Dark grean
+  { 171, 82, 54 },   // 4:  Brown
+  { 95, 87, 79 },    // 5:  Dark gray
+  { 194, 195, 199 }, // 6:  Light gray
+  { 255, 241, 232 }, // 7:  White
+  { 255, 0, 77 },    // 8:  Red
+  { 255, 163, 0 },   // 9:  Orange
+  { 255, 236, 39 },  // 10: Yellow
+  { 0, 228, 54 },    // 11: Green
+  { 41, 173, 255 },  // 12: Blue
+  { 131, 118, 156 }, // 13: Indigo
+  { 255, 119, 168 }, // 14: Pink
+  { 255, 204, 170 }, // 15: Peach
 };
 
-uint32_t *sprites;
-SDL_Texture *sprites_texture;
-SDL_PixelFormat *pixel_format;
-SDL_Renderer *renderer;
+uint32_t* sprites;
+SDL_Texture* sprites_texture;
+SDL_PixelFormat* pixel_format;
+SDL_Renderer* renderer;
 
 double color_distance(int r1, int g1, int b1, int r2, int g2, int b2) {
   double dr = static_cast<double>(r1 - r2) * 0.30;
@@ -65,7 +65,7 @@ RGB find_closest_color(int r, int g, int b) {
   return palette[c];
 }
 
-SDL_PixelFormat *best_pixel_format(const SDL_RendererInfo *renderer_info) {
+SDL_PixelFormat* best_pixel_format(const SDL_RendererInfo* renderer_info) {
   uint32_t format = renderer_info->texture_formats[0];
   for (uint32_t i = 0; i < renderer_info->num_texture_formats; ++i) {
     if (!SDL_ISPIXELFORMAT_FOURCC(renderer_info->texture_formats[i]) &&
@@ -95,26 +95,24 @@ SDL_Rect calc_screen_rect(int width, int height) {
     }
     w = (n - 1) * VOX_WIDTH;
   }
-  return {(width - w) / 2, (height - w) / 2, w, w};
+  return { (width - w) / 2, (height - w) / 2, w, w };
 }
 
 uint32_t round_to_nearest_multiple(uint32_t value, uint32_t multiple) {
   return (value + (multiple - 1)) & ~(multiple - 1);
 }
 
-int import_sprites(const char *filename, int pos) {
+int import_sprites(const char* filename, int pos) {
   int w, h, n;
-  uint8_t *data = stbi_load(filename, &w, &h, &n, 0);
+  uint8_t* data = stbi_load(filename, &w, &h, &n, 0);
 
   if (!data) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                 "Unable to import sprites from '%s'", filename);
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to import sprites from '%s'", filename);
     return -1;
   }
 
   if (n != 3 && n != 4) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                 "Unable to handle byte formate of '%s'", filename);
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to handle byte formate of '%s'", filename);
     return -1;
   }
 
@@ -125,25 +123,22 @@ int import_sprites(const char *filename, int pos) {
     int oy = n * VOX_SPRITE_WIDTH * w * j;
     for (int i = 0; i < sw; ++i) {
       int ox = n * VOX_SPRITE_WIDTH * i;
-      uint8_t *src = data + ox + oy;
+      uint8_t* src = data + ox + oy;
       int px = pos % VOX_SPRITES_COUNT;
       int py = pos / VOX_SPRITES_COUNT;
-      uint32_t *dst = sprites + py * VOX_SPRITES_WIDTH * VOX_SPRITE_WIDTH +
-                      px * VOX_SPRITE_WIDTH;
+      uint32_t* dst = sprites + py * VOX_SPRITES_WIDTH * VOX_SPRITE_WIDTH + px * VOX_SPRITE_WIDTH;
       for (int y = 0; y < VOX_SPRITE_WIDTH; y++) {
         for (int x = 0; x < VOX_SPRITE_WIDTH; x++) {
-          uint8_t *p = &src[n * y * w + n * x];
+          uint8_t* p = &src[n * y * w + n * x];
           RGB c = find_closest_color(p[0], p[1], p[2]);
-          dst[y * VOX_SPRITES_WIDTH + x] =
-              SDL_MapRGBA(pixel_format, c.r, c.g, c.b, 255);
+          dst[y * VOX_SPRITES_WIDTH + x] = SDL_MapRGBA(pixel_format, c.r, c.g, c.b, 255);
         }
       }
       pos++;
     }
   }
 
-  SDL_UpdateTexture(sprites_texture, NULL, sprites,
-                    VOX_SPRITES_WIDTH * sizeof(uint32_t));
+  SDL_UpdateTexture(sprites_texture, NULL, sprites, VOX_SPRITES_WIDTH * sizeof(uint32_t));
 
   return pos;
 }
@@ -154,8 +149,7 @@ void cls(uint8_t col = 0) {
   SDL_RenderClear(renderer);
 }
 
-void spr(int n, int x, int y, int w = VOX_SPRITE_WIDTH,
-         int h = VOX_SPRITE_WIDTH) {
+void spr(int n, int x, int y, int w = VOX_SPRITE_WIDTH, int h = VOX_SPRITE_WIDTH) {
   SDL_Rect src;
   src.x = (n % VOX_SPRITES_COUNT) * VOX_SPRITES_WIDTH * VOX_SPRITE_WIDTH;
   src.y = (n / VOX_SPRITES_COUNT) * VOX_SPRITE_WIDTH;
@@ -171,8 +165,8 @@ void spr(int n, int x, int y, int w = VOX_SPRITE_WIDTH,
   SDL_RenderCopy(renderer, sprites_texture, &src, &dst);
 }
 
-void print(const char *str, int x, int y) {
-  for (const char *c = str; *c; ++c) {
+void print(const char* str, int x, int y) {
+  for (const char* c = str; *c; ++c) {
     spr(*c, x, y);
     x += VOX_SPRITE_WIDTH / 2;
   }
@@ -180,50 +174,44 @@ void print(const char *str, int x, int y) {
 
 } // namespace
 
-int main(int argc, char *argv[]) {
-  SDL_Window *window;
+int main(int argc, char* argv[]) {
+  SDL_Window* window;
   SDL_RendererInfo renderer_info;
   SDL_Event event;
-  SDL_Texture *texture;
+  SDL_Texture* texture;
 
   int32_t width = 800, height = 800;
 
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize video: %s",
-                 SDL_GetError());
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize video: %s", SDL_GetError());
     return 3;
   }
 
-  if (SDL_CreateWindowAndRenderer(width, height, SDL_WINDOW_RESIZABLE, &window,
-                                  &renderer)) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                 "Couldn't create window and renderer: %s", SDL_GetError());
+  if (SDL_CreateWindowAndRenderer(width, height, SDL_WINDOW_RESIZABLE, &window, &renderer)) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create window and renderer: %s",
+                 SDL_GetError());
     return 3;
   }
 
   if (SDL_GetRendererInfo(renderer, &renderer_info)) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't get renderer info: %s",
-                 SDL_GetError());
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't get renderer info: %s", SDL_GetError());
     return 3;
   }
 
   pixel_format = best_pixel_format(&renderer_info);
 
-  SDL_Log("Using pixel format: %s",
-          SDL_GetPixelFormatName(pixel_format->format));
+  SDL_Log("Using pixel format: %s", SDL_GetPixelFormatName(pixel_format->format));
 
-  sprites_texture = SDL_CreateTexture(renderer, pixel_format->format,
-                                      SDL_TEXTUREACCESS_STATIC,
+  sprites_texture = SDL_CreateTexture(renderer, pixel_format->format, SDL_TEXTUREACCESS_STATIC,
                                       VOX_SPRITES_WIDTH, VOX_SPRITES_WIDTH);
 
-  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
-                              SDL_TEXTUREACCESS_TARGET, VOX_WIDTH, VOX_WIDTH);
+  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+                              VOX_WIDTH, VOX_WIDTH);
 
   // TODO: Allocate properly based on the best format
   sprites = new uint32_t[VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH];
 
-  memset(sprites, 255,
-         VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH * sizeof(uint32_t));
+  memset(sprites, 255, VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH * sizeof(uint32_t));
 
   int pos = 0;
   pos = import_sprites("pico8_font.png", pos);
@@ -239,10 +227,10 @@ int main(int argc, char *argv[]) {
 
     if (event.type == SDL_WINDOWEVENT) {
       switch (event.window.event) {
-      case SDL_WINDOWEVENT_RESIZED:
-      case SDL_WINDOWEVENT_SIZE_CHANGED:
-        screen_rect = calc_screen_rect(event.window.data1, event.window.data2);
-        break;
+        case SDL_WINDOWEVENT_RESIZED:
+        case SDL_WINDOWEVENT_SIZE_CHANGED:
+          screen_rect = calc_screen_rect(event.window.data1, event.window.data2);
+          break;
       }
     }
 
