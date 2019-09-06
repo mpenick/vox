@@ -47,6 +47,25 @@ RGB palette[] = {
   { 255, 204, 170 }, // 15: Peach
 };
 
+glm::vec3 spalette[] = {
+  glm::vec3(0, 0, 0),       // 0:  Black
+  glm::vec3(29, 43, 83),    // 1:  Dark blue
+  glm::vec3(126, 37, 83),   // 2:  Dark blue
+  glm::vec3(0, 135, 81),    // 3:  Dark grean
+  glm::vec3(171, 82, 54),   // 4:  Brown
+  glm::vec3(95, 87, 79),    // 5:  Dark gray
+  glm::vec3(194, 195, 199), // 6:  Light gray
+  glm::vec3(255, 241, 232), // 7:  White
+  glm::vec3(255, 0, 77),    // 8:  Red
+  glm::vec3(255, 163, 0),   // 9:  Orange
+  glm::vec3(255, 236, 39),  // 10: Yellow
+  glm::vec3(0, 228, 54),    // 11: Green
+  glm::vec3(41, 173, 255),  // 12: Blue
+  glm::vec3(131, 118, 156), // 13: Indigo
+  glm::vec3(255, 119, 168), // 14: Pink
+  glm::vec3(255, 204, 170), // 15: Peach
+};
+
 double color_distance(int r1, int g1, int b1, int r2, int g2, int b2) {
   double dr = static_cast<double>(r1 - r2) * 0.30;
   double dg = static_cast<double>(g1 - g2) * 0.59;
@@ -218,10 +237,10 @@ int sprite_batch_count = 0;
 
 void initialize() {
   float vertices[] = {
-    8.f, 8.f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top right
-    8.f, 0.f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom right
-    0.f, 0.f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom left
-    0.f, 8.f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f  // top left
+    8.f, 8.f, 0.0f, 1.0f, 1.0f, // top right
+    8.f, 0.f, 0.0f, 1.0f, 0.0f, // bottom right
+    0.f, 0.f, 0.0f, 0.0f, 0.0f, // bottom left
+    0.f, 8.f, 0.0f, 0.0f, 1.0f  // top left
   };
 
   unsigned int indices[] = {
@@ -249,25 +268,22 @@ void initialize() {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
-
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
   }
 
   {
     glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec4) * VOX_MAX_SPRITE_BATCH, NULL, GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(2);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glVertexAttribDivisor(3, 1);
+    glVertexAttribDivisor(2, 1);
   }
 
   glBindVertexArray(0);
@@ -295,12 +311,13 @@ void spr(int n, int x, int y) {
   glm::vec4 s;
   s.x = (float)x;
   s.y = (float)y;
+  s.z = (float)n;
   sprite_batch[sprite_batch_count++] = s;
 }
 
 uint64_t wyhash64_x;
 
-uint64_t wyhash64() {
+uint64_t rnd() {
   wyhash64_x += 0x60bee2bee120fc15;
   __uint128_t tmp;
   tmp = (__uint128_t)wyhash64_x * 0xa3b195354a39b70d;
@@ -322,9 +339,10 @@ void draw() {
   glm::mat4 proj = glm::ortho(0.0f, 128.0f, 128.0f, 0.0f, 0.0f, 1.0f);
 
   glUniformMatrix4fv(glGetUniformLocation(shader, "proj"), 1, GL_FALSE, glm::value_ptr(proj));
+  glUniform3fv(glGetUniformLocation(shader, "palette"), 16, glm::value_ptr(spalette[0]));
 
-  for (int i = 0; i < 3000; ++i) {
-    spr(0, wyhash64() % 128, wyhash64() % 128);
+  for (int i = 0; i < 128; ++i) {
+    spr(34 + rnd() % (48 - 33), rnd() % 128, rnd() % 128);
   }
 
   if (sprite_batch_count > 0) {
@@ -333,7 +351,7 @@ void draw() {
 }
 
 int main(int argc, char* argv[]) {
-  stbi_set_flip_vertically_on_load(true);
+  // stbi_set_flip_vertically_on_load(true);
 
   if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO) < 0) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to initialize video: %s", SDL_GetError());
@@ -356,6 +374,8 @@ int main(int argc, char* argv[]) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to create GL context: %s", SDL_GetError());
     return 1;
   }
+
+  SDL_Log("glGetString(GL_VERSION) returns %s\n", glGetString(GL_VERSION));
 
   bool is_running = true;
 
@@ -386,7 +406,6 @@ int main(int argc, char* argv[]) {
     SDL_GL_SwapWindow(window);
   }
 
-  printf("glGetString (GL_VERSION) returns %s\n", glGetString(GL_VERSION));
   SDL_GL_DeleteContext(context);
   SDL_DestroyWindow(window);
   SDL_Quit();
