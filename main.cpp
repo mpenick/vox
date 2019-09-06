@@ -1,6 +1,14 @@
 #include <SDL.h>
 
+#include <epoxy/gl.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 #include <algorithm>
+#include <fstream>
+#include <string>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -39,11 +47,6 @@ RGB palette[] = {
   { 255, 204, 170 }, // 15: Peach
 };
 
-uint32_t* sprites;
-SDL_Texture* sprites_texture;
-SDL_PixelFormat* pixel_format;
-SDL_Renderer* renderer;
-
 double color_distance(int r1, int g1, int b1, int r2, int g2, int b2) {
   double dr = static_cast<double>(r1 - r2) * 0.30;
   double dg = static_cast<double>(g1 - g2) * 0.59;
@@ -63,18 +66,6 @@ RGB find_closest_color(int r, int g, int b) {
     }
   }
   return palette[c];
-}
-
-SDL_PixelFormat* best_pixel_format(const SDL_RendererInfo* renderer_info) {
-  uint32_t format = renderer_info->texture_formats[0];
-  for (uint32_t i = 0; i < renderer_info->num_texture_formats; ++i) {
-    if (!SDL_ISPIXELFORMAT_FOURCC(renderer_info->texture_formats[i]) &&
-        SDL_ISPIXELFORMAT_ALPHA(renderer_info->texture_formats[i])) {
-      format = renderer_info->texture_formats[i];
-      break;
-    }
-  }
-  return SDL_AllocFormat(format);
 }
 
 SDL_Rect calc_screen_rect(int width, int height) {
@@ -98,10 +89,6 @@ SDL_Rect calc_screen_rect(int width, int height) {
   return { (width - w) / 2, (height - w) / 2, w, w };
 }
 
-uint32_t round_to_nearest_multiple(uint32_t value, uint32_t multiple) {
-  return (value + (multiple - 1)) & ~(multiple - 1);
-}
-
 int import_sprites(const char* filename, int pos) {
   int w, h, n;
   uint8_t* data = stbi_load(filename, &w, &h, &n, 0);
@@ -119,135 +106,261 @@ int import_sprites(const char* filename, int pos) {
   int sw = w / 8;
   int sh = h / 8;
 
-  for (int j = 0; j < sh; ++j) {
-    int oy = n * VOX_SPRITE_WIDTH * w * j;
-    for (int i = 0; i < sw; ++i) {
-      int ox = n * VOX_SPRITE_WIDTH * i;
-      uint8_t* src = data + ox + oy;
-      int px = pos % VOX_SPRITES_COUNT;
-      int py = pos / VOX_SPRITES_COUNT;
-      uint32_t* dst = sprites + py * VOX_SPRITES_WIDTH * VOX_SPRITE_WIDTH + px * VOX_SPRITE_WIDTH;
-      for (int y = 0; y < VOX_SPRITE_WIDTH; y++) {
-        for (int x = 0; x < VOX_SPRITE_WIDTH; x++) {
-          uint8_t* p = &src[n * y * w + n * x];
-          RGB c = find_closest_color(p[0], p[1], p[2]);
-          dst[y * VOX_SPRITES_WIDTH + x] = SDL_MapRGBA(pixel_format, c.r, c.g, c.b, 255);
-        }
-      }
-      pos++;
-    }
-  }
-
-  SDL_UpdateTexture(sprites_texture, NULL, sprites, VOX_SPRITES_WIDTH * sizeof(uint32_t));
-
   return pos;
-}
-
-void cls(uint8_t col = 0) {
-  RGB c = palette[col];
-  SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 0x00);
-  SDL_RenderClear(renderer);
-}
-
-void spr(int n, int x, int y, int w = VOX_SPRITE_WIDTH, int h = VOX_SPRITE_WIDTH) {
-  SDL_Rect src;
-  src.x = (n % VOX_SPRITES_COUNT) * VOX_SPRITES_WIDTH * VOX_SPRITE_WIDTH;
-  src.y = (n / VOX_SPRITES_COUNT) * VOX_SPRITE_WIDTH;
-  src.w = VOX_SPRITE_WIDTH;
-  src.h = VOX_SPRITE_WIDTH;
-
-  SDL_Rect dst;
-  dst.x = x;
-  dst.y = y;
-  dst.w = VOX_SPRITE_WIDTH;
-  dst.h = VOX_SPRITE_WIDTH;
-
-  SDL_RenderCopy(renderer, sprites_texture, &src, &dst);
-}
-
-void print(const char* str, int x, int y) {
-  for (const char* c = str; *c; ++c) {
-    spr(*c, x, y);
-    x += VOX_SPRITE_WIDTH / 2;
-  }
 }
 
 } // namespace
 
-int main(int argc, char* argv[]) {
-  SDL_Window* window;
-  SDL_RendererInfo renderer_info;
-  SDL_Event event;
-  SDL_Texture* texture;
+unsigned int ERROR = -1;
 
-  int32_t width = 800, height = 800;
+std::string read_content(const std::string& filename) {
+  std::ifstream f(filename);
+  std::string str;
 
-  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize video: %s", SDL_GetError());
-    return 3;
+  f.seekg(0, std::ios::end);
+  str.reserve(f.tellg());
+  f.seekg(0, std::ios::beg);
+
+  str.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  return str;
+}
+
+bool compile_shader(unsigned int id, const std::string& source) {
+  const char* p = source.c_str();
+  glShaderSource(id, 1, &p, NULL);
+  glCompileShader(id);
+
+  int success;
+  glGetShaderiv(id, GL_COMPILE_STATUS, &success);
+
+  if (!success) {
+    char info_log[512];
+    glGetShaderInfoLog(id, 512, NULL, info_log);
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to compile shader: %s", info_log);
+    return false;
   }
 
-  if (SDL_CreateWindowAndRenderer(width, height, SDL_WINDOW_RESIZABLE, &window, &renderer)) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create window and renderer: %s",
-                 SDL_GetError());
-    return 3;
+  return true;
+}
+
+unsigned int load_shader(const char* name) {
+  unsigned int shader;
+
+  unsigned int vertex_shader;
+  vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+  std::string vertex_shader_file(name);
+  vertex_shader_file.append(".vert");
+  if (!compile_shader(vertex_shader, read_content(vertex_shader_file))) {
+    return ERROR;
   }
 
-  if (SDL_GetRendererInfo(renderer, &renderer_info)) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't get renderer info: %s", SDL_GetError());
-    return 3;
+  unsigned int fragment_shader;
+  fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
+  std::string fragment_shader_file(name);
+  fragment_shader_file.append(".frag");
+  if (!compile_shader(fragment_shader, read_content(fragment_shader_file))) {
+    return ERROR;
   }
 
-  pixel_format = best_pixel_format(&renderer_info);
+  shader = glCreateProgram();
+  glAttachShader(shader, vertex_shader);
+  glAttachShader(shader, fragment_shader);
+  glLinkProgram(shader);
 
-  SDL_Log("Using pixel format: %s", SDL_GetPixelFormatName(pixel_format->format));
+  int success;
+  glGetProgramiv(shader, GL_LINK_STATUS, &success);
+  if (!success) {
+    char info_log[512];
+    glGetProgramInfoLog(shader, 512, NULL, info_log);
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to link shader: %s", info_log);
+    return ERROR;
+  }
 
-  sprites_texture = SDL_CreateTexture(renderer, pixel_format->format, SDL_TEXTUREACCESS_STATIC,
-                                      VOX_SPRITES_WIDTH, VOX_SPRITES_WIDTH);
+  return shader;
+}
 
-  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
-                              VOX_WIDTH, VOX_WIDTH);
+unsigned int load_texture(const char* filename) {
+  unsigned int texture;
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
 
-  // TODO: Allocate properly based on the best format
-  sprites = new uint32_t[VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH];
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  memset(sprites, 255, VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH * sizeof(uint32_t));
+  int width, height, n;
+  unsigned char* data = stbi_load(filename, &width, &height, &n, 0);
 
-  int pos = 0;
-  pos = import_sprites("pico8_font.png", pos);
-  // import_sprites("sprites1.png", pos);
+  int format = n == 3 ? GL_RGB : GL_RGBA;
 
-  SDL_Rect screen_rect = calc_screen_rect(width, height);
+  if (data) {
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+  } else {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to load texture: %s", filename);
+    return ERROR;
+  }
 
-  while (1) {
-    SDL_PollEvent(&event);
-    if (event.type == SDL_QUIT) {
-      break;
+  stbi_image_free(data);
+
+  return texture;
+}
+
+unsigned int shader;
+unsigned int texture;
+unsigned int vao;
+
+void initialize() {
+  glm::vec2 translations[256];
+  int index = 0;
+  for (int y = 0; y < 16; y++) {
+    for (int x = 0; x < 16; x++) {
+      glm::vec2 translation;
+      translation.x = (float)x * 8.0f;
+      translation.y = (float)y * 8.0f;
+      translations[index++] = translation;
     }
+  }
 
-    if (event.type == SDL_WINDOWEVENT) {
-      switch (event.window.event) {
-        case SDL_WINDOWEVENT_RESIZED:
-        case SDL_WINDOWEVENT_SIZE_CHANGED:
-          screen_rect = calc_screen_rect(event.window.data1, event.window.data2);
-          break;
+  float vertices[] = {
+    8.f, 8.f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top right
+    8.f, 0.f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom right
+    0.f, 0.f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom left
+    0.f, 8.f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f  // top left
+  };
+
+  unsigned int indices[] = {
+    0, 1, 3, // first triangle
+    1, 2, 3  // second triangle
+  };
+
+  glGenVertexArrays(1, &vao);
+
+  unsigned int vbo;
+  glGenBuffers(1, &vbo);
+
+  unsigned int instance_vbo;
+  glGenBuffers(1, &instance_vbo);
+
+  unsigned int ebo;
+  glGenBuffers(1, &ebo);
+
+  glBindVertexArray(vao);
+
+  {
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+  }
+
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+  }
+
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * 256, &translations[0], GL_STATIC_DRAW);
+
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(3);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glVertexAttribDivisor(3, 1);
+  }
+
+  glBindVertexArray(0);
+
+  texture = load_texture("pico8_font.png");
+  shader = load_shader("sprite");
+
+  SDL_Rect screen_rect = calc_screen_rect(800, 800);
+  glViewport(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
+}
+
+void update() {}
+
+void draw() {
+  glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glUseProgram(shader);
+
+  glm::mat4 proj = glm::ortho(0.0f, 128.0f, 128.0f, 0.0f, 0.0f, 1.0f);
+
+  glUniformMatrix4fv(glGetUniformLocation(shader, "proj"), 1, GL_FALSE, glm::value_ptr(proj));
+
+  glBindVertexArray(vao);
+  glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 16);
+  glBindVertexArray(0);
+}
+
+int main(int argc, char* argv[]) {
+  stbi_set_flip_vertically_on_load(true);
+
+  if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO) < 0) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to initialize video: %s", SDL_GetError());
+    return 1;
+  }
+
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+
+  SDL_Window* window = SDL_CreateWindow("Vox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                                        800, 800, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+  if (!window) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to create window: %s", SDL_GetError());
+    return 1;
+  }
+
+  SDL_GLContext context = SDL_GL_CreateContext(window);
+  if (!context) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to create GL context: %s", SDL_GetError());
+    return 1;
+  }
+
+  bool is_running = true;
+
+  initialize();
+
+  while (is_running) {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+      if (event.type == SDL_QUIT) {
+        is_running = false;
+        break;
+      }
+
+      if (event.type == SDL_WINDOWEVENT) {
+        switch (event.window.event) {
+          case SDL_WINDOWEVENT_RESIZED:
+          case SDL_WINDOWEVENT_SIZE_CHANGED: {
+            SDL_Rect screen_rect = calc_screen_rect(event.window.data1, event.window.data2);
+            glViewport(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
+          } break;
+        }
       }
     }
 
-    SDL_SetRenderTarget(renderer, texture);
-    cls(8);
+    update();
+    draw();
 
-    for (int i = 0; i < 1000; ++i) {
-      spr(48, rand() % 128, rand() % 128);
-    }
-
-    SDL_SetRenderTarget(renderer, NULL);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, &screen_rect);
-    SDL_RenderPresent(renderer);
+    SDL_GL_SwapWindow(window);
   }
-  SDL_DestroyRenderer(renderer);
+
+  printf("glGetString (GL_VERSION) returns %s\n", glGetString(GL_VERSION));
+  SDL_GL_DeleteContext(context);
+  SDL_DestroyWindow(window);
   SDL_Quit();
-  return 0;
 }
