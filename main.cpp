@@ -210,19 +210,13 @@ unsigned int load_texture(const char* filename) {
 unsigned int shader;
 unsigned int texture;
 unsigned int vao;
+unsigned int instance_vbo;
+
+#define VOX_MAX_SPRITE_BATCH 8192
+glm::vec4 sprite_batch[VOX_MAX_SPRITE_BATCH];
+int sprite_batch_count = 0;
 
 void initialize() {
-  glm::vec2 translations[256];
-  int index = 0;
-  for (int y = 0; y < 16; y++) {
-    for (int x = 0; x < 16; x++) {
-      glm::vec2 translation;
-      translation.x = (float)x * 8.0f;
-      translation.y = (float)y * 8.0f;
-      translations[index++] = translation;
-    }
-  }
-
   float vertices[] = {
     8.f, 8.f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top right
     8.f, 0.f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom right
@@ -236,12 +230,10 @@ void initialize() {
   };
 
   glGenVertexArrays(1, &vao);
+  glGenBuffers(1, &instance_vbo);
 
   unsigned int vbo;
   glGenBuffers(1, &vbo);
-
-  unsigned int instance_vbo;
-  glGenBuffers(1, &instance_vbo);
 
   unsigned int ebo;
   glGenBuffers(1, &ebo);
@@ -269,9 +261,9 @@ void initialize() {
 
   {
     glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * 256, &translations[0], GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec4) * VOX_MAX_SPRITE_BATCH, NULL, GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(3);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -287,6 +279,37 @@ void initialize() {
   glViewport(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
 }
 
+void flush() {
+  glBindVertexArray(vao);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::vec4) * sprite_batch_count, &sprite_batch[0]);
+  glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, sprite_batch_count);
+  glBindVertexArray(0);
+  sprite_batch_count = 0;
+}
+
+void spr(int n, int x, int y) {
+  if (sprite_batch_count >= VOX_MAX_SPRITE_BATCH) {
+    flush();
+  }
+  glm::vec4 s;
+  s.x = (float)x;
+  s.y = (float)y;
+  sprite_batch[sprite_batch_count++] = s;
+}
+
+uint64_t wyhash64_x;
+
+uint64_t wyhash64() {
+  wyhash64_x += 0x60bee2bee120fc15;
+  __uint128_t tmp;
+  tmp = (__uint128_t)wyhash64_x * 0xa3b195354a39b70d;
+  uint64_t m1 = (tmp >> 64) ^ tmp;
+  tmp = (__uint128_t)m1 * 0x1b03738712fad5c9;
+  uint64_t m2 = (tmp >> 64) ^ tmp;
+  return m2;
+}
+
 void update() {}
 
 void draw() {
@@ -300,9 +323,13 @@ void draw() {
 
   glUniformMatrix4fv(glGetUniformLocation(shader, "proj"), 1, GL_FALSE, glm::value_ptr(proj));
 
-  glBindVertexArray(vao);
-  glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 16);
-  glBindVertexArray(0);
+  for (int i = 0; i < 3000; ++i) {
+    spr(0, wyhash64() % 128, wyhash64() % 128);
+  }
+
+  if (sprite_batch_count > 0) {
+    flush();
+  }
 }
 
 int main(int argc, char* argv[]) {
