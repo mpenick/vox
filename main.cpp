@@ -182,17 +182,25 @@ unsigned int load_texture(const char* filename) {
   int width, height, n;
   uint8_t* data = stbi_load(filename, &width, &height, &n, 0);
 
-  uint8_t* palettized = new uint8_t[width * height];
+  uint8_t* palettized = new uint8_t[VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH];
 
-  for (int i = 0; i < width; ++i) {
-    for (int j = 0; j < height; ++j) {
-      uint8_t* p = &data[j * width * n + i * n];
-      palettized[j * width + i] = find_closest_color(p[0], p[1], p[2]);
-    }
-  }
+  memset(palettized, 0, VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH);
+
   if (data) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, width, height, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE,
-                 palettized);
+    int minw = std::min(VOX_SPRITES_WIDTH, width);
+    int minh = std::min(VOX_SPRITES_WIDTH, height);
+
+    for (int i = 0; i < minw; ++i) {
+      for (int j = 0; j < minh; ++j) {
+        uint8_t* p = &data[j * width * n + i * n];
+        palettized[j * VOX_SPRITES_WIDTH + i] = find_closest_color(p[0], p[1], p[2]);
+      }
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, VOX_SPRITES_WIDTH, VOX_SPRITES_WIDTH, 0, GL_RED_INTEGER,
+                 GL_UNSIGNED_BYTE, palettized);
+    // glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, VOX_SPRITES_WIDTH, VOX_SPRITE_WIDTH, GL_RED_INTEGER,
+    //                GL_UNSIGNED_BYTE, palettized);
   } else {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to load texture: %s", filename);
     return ERROR;
@@ -341,15 +349,13 @@ void draw() {
   glUniform1iv(glGetUniformLocation(shader, "alphaMap"), 16, salpha_map);
   glUniform1iv(glGetUniformLocation(shader, "colorMap"), 16, scolor_map);
 
-  /*
-  for (int i = 0; i < 20000; ++i) {
+  for (int i = 0; i < 4000; ++i) {
     spr(34 + rnd() % (48 - 33), rnd() % 128, rnd() % 128);
   }
-  */
 
   print("hello my name is mike!", 0, 0);
 
-  // spr(48, -1, -1);
+  // spr(48, 5, 5);
 
   if (sprite_batch_count > 0) {
     flush();
