@@ -47,23 +47,14 @@ RGB palette[] = {
   { 255, 204, 170 }, // 15: Peach
 };
 
-glm::vec3 spalette[] = {
-  glm::vec3(0, 0, 0),       // 0:  Black
-  glm::vec3(29, 43, 83),    // 1:  Dark blue
-  glm::vec3(126, 37, 83),   // 2:  Dark blue
-  glm::vec3(0, 135, 81),    // 3:  Dark grean
-  glm::vec3(171, 82, 54),   // 4:  Brown
-  glm::vec3(95, 87, 79),    // 5:  Dark gray
-  glm::vec3(194, 195, 199), // 6:  Light gray
-  glm::vec3(255, 241, 232), // 7:  White
-  glm::vec3(255, 0, 77),    // 8:  Red
-  glm::vec3(255, 163, 0),   // 9:  Orange
-  glm::vec3(255, 236, 39),  // 10: Yellow
-  glm::vec3(0, 228, 54),    // 11: Green
-  glm::vec3(41, 173, 255),  // 12: Blue
-  glm::vec3(131, 118, 156), // 13: Indigo
-  glm::vec3(255, 119, 168), // 14: Pink
-  glm::vec3(255, 204, 170), // 15: Peach
+glm::vec3 spalette[16];
+
+int salpha_map[] = {
+  1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+};
+
+int scolor_map[] = {
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 };
 
 double color_distance(int r1, int g1, int b1, int r2, int g2, int b2) {
@@ -73,7 +64,7 @@ double color_distance(int r1, int g1, int b1, int r2, int g2, int b2) {
   return dr * dr + dg * dg + db * db;
 }
 
-RGB find_closest_color(int r, int g, int b) {
+uint8_t find_closest_color(int r, int g, int b) {
   uint8_t c = 0;
   double min_dist = color_distance(r, g, b, 0, 0, 0);
   for (uint8_t i = 1; i < 16; ++i) {
@@ -84,7 +75,7 @@ RGB find_closest_color(int r, int g, int b) {
       min_dist = dist;
     }
   }
-  return palette[c];
+  return c;
 }
 
 SDL_Rect calc_screen_rect(int width, int height) {
@@ -106,26 +97,6 @@ SDL_Rect calc_screen_rect(int width, int height) {
     w = (n - 1) * VOX_WIDTH;
   }
   return { (width - w) / 2, (height - w) / 2, w, w };
-}
-
-int import_sprites(const char* filename, int pos) {
-  int w, h, n;
-  uint8_t* data = stbi_load(filename, &w, &h, &n, 0);
-
-  if (!data) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to import sprites from '%s'", filename);
-    return -1;
-  }
-
-  if (n != 3 && n != 4) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to handle byte formate of '%s'", filename);
-    return -1;
-  }
-
-  int sw = w / 8;
-  int sh = h / 8;
-
-  return pos;
 }
 
 } // namespace
@@ -209,19 +180,26 @@ unsigned int load_texture(const char* filename) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
   int width, height, n;
-  unsigned char* data = stbi_load(filename, &width, &height, &n, 0);
+  uint8_t* data = stbi_load(filename, &width, &height, &n, 0);
 
-  int format = n == 3 ? GL_RGB : GL_RGBA;
+  uint8_t* palettized = new uint8_t[width * height];
 
+  for (int i = 0; i < width; ++i) {
+    for (int j = 0; j < height; ++j) {
+      uint8_t* p = &data[j * width * n + i * n];
+      palettized[j * width + i] = find_closest_color(p[0], p[1], p[2]);
+    }
+  }
   if (data) {
-    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, width, height, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE,
+                 palettized);
   } else {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to load texture: %s", filename);
     return ERROR;
   }
 
   stbi_image_free(data);
+  delete[] palettized;
 
   return texture;
 }
@@ -232,10 +210,15 @@ unsigned int vao;
 unsigned int instance_vbo;
 
 #define VOX_MAX_SPRITE_BATCH 8192
-glm::vec4 sprite_batch[VOX_MAX_SPRITE_BATCH];
+glm::uvec2 sprite_batch[VOX_MAX_SPRITE_BATCH];
 int sprite_batch_count = 0;
 
 void initialize() {
+  for (int i = 0; i < 16; ++i) {
+    RGB c = palette[i];
+    spalette[i] = glm::vec3((float)c.r / 256.0, (float)c.g / 256.0, (float)c.b / 256.0);
+  }
+
   float vertices[] = {
     8.f, 8.f, 0.0f, 1.0f, 1.0f, // top right
     8.f, 0.f, 0.0f, 1.0f, 0.0f, // bottom right
@@ -277,9 +260,9 @@ void initialize() {
 
   {
     glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec4) * VOX_MAX_SPRITE_BATCH, NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::uvec2) * VOX_MAX_SPRITE_BATCH, NULL, GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glVertexAttribIPointer(2, 2, GL_UNSIGNED_INT, 2 * sizeof(GLuint), (void*)0);
     glEnableVertexAttribArray(2);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -290,6 +273,10 @@ void initialize() {
 
   texture = load_texture("pico8_font.png");
   shader = load_shader("sprite");
+  if (shader == ERROR) {
+    SDL_Quit();
+    exit(1);
+  }
 
   SDL_Rect screen_rect = calc_screen_rect(800, 800);
   glViewport(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
@@ -298,7 +285,7 @@ void initialize() {
 void flush() {
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::vec4) * sprite_batch_count, &sprite_batch[0]);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::uvec2) * sprite_batch_count, &sprite_batch[0]);
   glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, sprite_batch_count);
   glBindVertexArray(0);
   sprite_batch_count = 0;
@@ -308,11 +295,22 @@ void spr(int n, int x, int y) {
   if (sprite_batch_count >= VOX_MAX_SPRITE_BATCH) {
     flush();
   }
-  glm::vec4 s;
-  s.x = (float)x;
-  s.y = (float)y;
-  s.z = (float)n;
+
+  glm::uvec2 s;
+  // n, x, y
+  s.x = ((uint8_t)(n & 0xFF) << 24) | ((uint8_t)(x + 128) & 0xFF) << 16 |
+        ((uint8_t)(y + 128) & 0xFF) << 8;
+  // w, h, fx, fy
+  // s.y = ((uint8_t)(w & 0xFF) << 24) | ((uint8_t)(h & 0xFF) << 16) |
+  //       ((uint8_t)(fx & 0xFF) << 8) | (uint8_t)fy & 0xFF;
   sprite_batch[sprite_batch_count++] = s;
+}
+
+void print(const char* str, int x, int y) {
+  for (const char* c = str; *c; ++c) {
+    spr(*c, x, y);
+    x += VOX_SPRITE_WIDTH / 2;
+  }
 }
 
 uint64_t wyhash64_x;
@@ -330,7 +328,7 @@ uint64_t rnd() {
 void update() {}
 
 void draw() {
-  glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   glBindTexture(GL_TEXTURE_2D, texture);
@@ -340,14 +338,28 @@ void draw() {
 
   glUniformMatrix4fv(glGetUniformLocation(shader, "proj"), 1, GL_FALSE, glm::value_ptr(proj));
   glUniform3fv(glGetUniformLocation(shader, "palette"), 16, glm::value_ptr(spalette[0]));
+  glUniform1iv(glGetUniformLocation(shader, "alphaMap"), 16, salpha_map);
+  glUniform1iv(glGetUniformLocation(shader, "colorMap"), 16, scolor_map);
 
-  for (int i = 0; i < 128; ++i) {
+  /*
+  for (int i = 0; i < 20000; ++i) {
     spr(34 + rnd() % (48 - 33), rnd() % 128, rnd() % 128);
   }
+  */
+
+  print("hello my name is mike!", 0, 0);
+
+  // spr(48, -1, -1);
 
   if (sprite_batch_count > 0) {
     flush();
   }
+}
+
+void on_debug_message(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
+                      const GLchar* message, const void* user_data) {
+  SDL_Log("GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
+          (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""), type, severity, message);
 }
 
 int main(int argc, char* argv[]) {
@@ -377,10 +389,14 @@ int main(int argc, char* argv[]) {
 
   SDL_Log("glGetString(GL_VERSION) returns %s\n", glGetString(GL_VERSION));
 
+  glEnable(GL_DEBUG_OUTPUT);
+  glDebugMessageCallback(on_debug_message, 0);
+
   bool is_running = true;
 
   initialize();
 
+  SDL_Rect screen_rect = calc_screen_rect(800, 800);
   while (is_running) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -393,7 +409,7 @@ int main(int argc, char* argv[]) {
         switch (event.window.event) {
           case SDL_WINDOWEVENT_RESIZED:
           case SDL_WINDOWEVENT_SIZE_CHANGED: {
-            SDL_Rect screen_rect = calc_screen_rect(event.window.data1, event.window.data2);
+            screen_rect = calc_screen_rect(event.window.data1, event.window.data2);
             glViewport(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
           } break;
         }
@@ -401,7 +417,13 @@ int main(int argc, char* argv[]) {
     }
 
     update();
+
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
     draw();
+    glDisable(GL_SCISSOR_TEST);
 
     SDL_GL_SwapWindow(window);
   }
