@@ -107,6 +107,10 @@ std::string read_content(const std::string& filename) {
   std::ifstream f(filename);
   std::string str;
 
+  if (f.fail()) {
+    return "";
+  }
+
   f.seekg(0, std::ios::end);
   str.reserve(f.tellg());
   f.seekg(0, std::ios::beg);
@@ -117,7 +121,7 @@ std::string read_content(const std::string& filename) {
 
 bool compile_shader(unsigned int id, const std::string& source) {
   const char* p = source.c_str();
-  glShaderSource(id, 1, &p, NULL);
+  glShaderSource(id, 1, &p, nullptr);
   glCompileShader(id);
 
   int success;
@@ -125,7 +129,7 @@ bool compile_shader(unsigned int id, const std::string& source) {
 
   if (!success) {
     char info_log[512];
-    glGetShaderInfoLog(id, 512, NULL, info_log);
+    glGetShaderInfoLog(id, 512, nullptr, info_log);
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to compile shader: %s", info_log);
     return false;
   }
@@ -161,7 +165,7 @@ unsigned int load_shader(const char* name) {
   glGetProgramiv(shader, GL_LINK_STATUS, &success);
   if (!success) {
     char info_log[512];
-    glGetProgramInfoLog(shader, 512, NULL, info_log);
+    glGetProgramInfoLog(shader, 512, nullptr, info_log);
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to link shader: %s", info_log);
     return ERROR;
   }
@@ -169,47 +173,32 @@ unsigned int load_shader(const char* name) {
   return shader;
 }
 
-unsigned int load_texture(const char* filename) {
-  unsigned int texture;
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-  int width, height, n;
+uint8_t* load_image(const char* filename) {
+  int n, width, height;
   uint8_t* data = stbi_load(filename, &width, &height, &n, 0);
+
+  if (!data) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to load image: %s", filename);
+    return nullptr;
+  }
 
   uint8_t* palettized = new uint8_t[VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH];
 
   memset(palettized, 0, VOX_SPRITES_WIDTH * VOX_SPRITES_WIDTH);
 
-  if (data) {
-    int minw = std::min(VOX_SPRITES_WIDTH, width);
-    int minh = std::min(VOX_SPRITES_WIDTH, height);
+  int minw = std::min(VOX_SPRITES_WIDTH, width);
+  int minh = std::min(VOX_SPRITES_WIDTH, height);
 
-    for (int i = 0; i < minw; ++i) {
-      for (int j = 0; j < minh; ++j) {
-        uint8_t* p = &data[j * width * n + i * n];
-        palettized[j * VOX_SPRITES_WIDTH + i] = find_closest_color(p[0], p[1], p[2]);
-      }
+  for (int i = 0; i < minw; ++i) {
+    for (int j = 0; j < minh; ++j) {
+      uint8_t* p = &data[j * width * n + i * n];
+      palettized[j * VOX_SPRITES_WIDTH + i] = find_closest_color(p[0], p[1], p[2]);
     }
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, VOX_SPRITES_WIDTH, VOX_SPRITES_WIDTH, 0, GL_RED_INTEGER,
-                 GL_UNSIGNED_BYTE, palettized);
-    // glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, VOX_SPRITES_WIDTH, VOX_SPRITE_WIDTH, GL_RED_INTEGER,
-    //                GL_UNSIGNED_BYTE, palettized);
-  } else {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to load texture: %s", filename);
-    return ERROR;
   }
 
   stbi_image_free(data);
-  delete[] palettized;
 
-  return texture;
+  return palettized;
 }
 
 unsigned int shader;
@@ -220,6 +209,35 @@ unsigned int instance_vbo;
 #define VOX_MAX_SPRITE_BATCH 8192
 glm::uvec2 sprite_batch[VOX_MAX_SPRITE_BATCH];
 int sprite_batch_count = 0;
+
+bool load_sprites(const char* filename, bool is_system_sprites = false) {
+  if (!texture) {
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, VOX_SPRITES_WIDTH, 2 * VOX_SPRITES_WIDTH, 0,
+                 GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr);
+  }
+
+  uint8_t* data = load_image(filename);
+
+  if (!data) {
+    return false;
+  }
+
+  int offset = is_system_sprites ? 0 : VOX_SPRITES_WIDTH;
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, offset, VOX_SPRITES_WIDTH, VOX_SPRITES_WIDTH, GL_RED_INTEGER,
+                  GL_UNSIGNED_BYTE, data);
+
+  delete[] data;
+
+  return true;
+}
 
 void initialize() {
   for (int i = 0; i < 16; ++i) {
@@ -268,7 +286,8 @@ void initialize() {
 
   {
     glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::uvec2) * VOX_MAX_SPRITE_BATCH, NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::uvec2) * VOX_MAX_SPRITE_BATCH, nullptr,
+                 GL_DYNAMIC_DRAW);
 
     glVertexAttribIPointer(2, 2, GL_UNSIGNED_INT, 2 * sizeof(GLuint), (void*)0);
     glEnableVertexAttribArray(2);
@@ -279,7 +298,11 @@ void initialize() {
 
   glBindVertexArray(0);
 
-  texture = load_texture("pico8_font.png");
+  if (!load_sprites("pico8_font.png", true) || !load_sprites("sprites1.png")) {
+    SDL_Quit();
+    exit(1);
+  }
+
   shader = load_shader("sprite");
   if (shader == ERROR) {
     SDL_Quit();
@@ -306,8 +329,8 @@ void spr(int n, int x, int y) {
 
   glm::uvec2 s;
   // n, x, y
-  s.x = ((uint8_t)(n & 0xFF) << 24) | ((uint8_t)(x + 128) & 0xFF) << 16 |
-        ((uint8_t)(y + 128) & 0xFF) << 8;
+  s.x = ((uint16_t)((n + 256) & 0xFFFF) << 16) | ((uint8_t)(x + 128) & 0xFF) << 8 |
+        ((uint8_t)(y + 128) & 0xFF);
   // w, h, fx, fy
   // s.y = ((uint8_t)(w & 0xFF) << 24) | ((uint8_t)(h & 0xFF) << 16) |
   //       ((uint8_t)(fx & 0xFF) << 8) | (uint8_t)fy & 0xFF;
@@ -316,7 +339,7 @@ void spr(int n, int x, int y) {
 
 void print(const char* str, int x, int y) {
   for (const char* c = str; *c; ++c) {
-    spr(*c, x, y);
+    spr(static_cast<int>(*c) - 256, x, y);
     x += VOX_SPRITE_WIDTH / 2;
   }
 }
@@ -349,13 +372,15 @@ void draw() {
   glUniform1iv(glGetUniformLocation(shader, "alphaMap"), 16, salpha_map);
   glUniform1iv(glGetUniformLocation(shader, "colorMap"), 16, scolor_map);
 
+#if 0
   for (int i = 0; i < 4000; ++i) {
     spr(34 + rnd() % (48 - 33), rnd() % 128, rnd() % 128);
   }
 
-  print("hello my name is mike!", 0, 0);
-
-  // spr(48, 5, 5);
+#else
+  print("hello my name is mike!", 0, 8);
+  spr(16 * 6, 0, 0);
+#endif
 
   if (sprite_batch_count > 0) {
     flush();
