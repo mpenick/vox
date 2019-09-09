@@ -246,10 +246,10 @@ void initialize() {
   }
 
   float vertices[] = {
-    8.f, 8.f, 0.0f, 1.0f, 1.0f, // top right
-    8.f, 0.f, 0.0f, 1.0f, 0.0f, // bottom right
+    1.f, 1.f, 0.0f, 1.0f, 1.0f, // top right
+    1.f, 0.f, 0.0f, 1.0f, 0.0f, // bottom right
     0.f, 0.f, 0.0f, 0.0f, 0.0f, // bottom left
-    0.f, 8.f, 0.0f, 0.0f, 1.0f  // top left
+    0.f, 1.f, 0.0f, 0.0f, 1.0f  // top left
   };
 
   unsigned int indices[] = {
@@ -314,30 +314,65 @@ void initialize() {
 }
 
 void flush() {
-  glBindVertexArray(vao);
-  glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::uvec2) * sprite_batch_count, &sprite_batch[0]);
-  glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, sprite_batch_count);
-  glBindVertexArray(0);
-  sprite_batch_count = 0;
+  if (sprite_batch_count > 0) {
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::uvec2) * sprite_batch_count, &sprite_batch[0]);
+    glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, sprite_batch_count);
+    glBindVertexArray(0);
+    sprite_batch_count = 0;
+  }
 }
 
-void spr(int n, int x, int y) {
+void pal() {
+  flush();
+  for (int i = 0; i < 16; ++i) {
+    scolor_map[i] = i;
+  }
+  glUniform1iv(glGetUniformLocation(shader, "colorMap"), 16, scolor_map);
+}
+
+void pal(uint8_t c0, uint8_t c1) {
+  flush();
+  scolor_map[c0] = c1;
+  glUniform1iv(glGetUniformLocation(shader, "colorMap"), 16, scolor_map);
+}
+
+void palt() {
+  flush();
+  memset(salpha_map, 0, sizeof(salpha_map));
+  salpha_map[0] = 1;
+  glUniform1iv(glGetUniformLocation(shader, "alphaMap"), 16, salpha_map);
+}
+
+void palt(int c, bool t) {
+  flush();
+  salpha_map[c] = t;
+  glUniform1iv(glGetUniformLocation(shader, "alphaMap"), 16, salpha_map);
+}
+
+void spr(int n, int x, int y, int w = 1, int h = 1, bool flipx = false, bool flipy = false) {
   if (sprite_batch_count >= VOX_MAX_SPRITE_BATCH) {
     flush();
   }
+  if (w < 0) w = 0;
+  if (h < 0) h = 0;
+  if (w > 16) w = 16;
+  if (h > 16) h = 16;
 
   glm::uvec2 s;
   // n, x, y
   s.x = ((uint16_t)((n + 256) & 0xFFFF) << 16) | ((uint8_t)(x + 128) & 0xFF) << 8 |
         ((uint8_t)(y + 128) & 0xFF);
   // w, h, fx, fy
-  // s.y = ((uint8_t)(w & 0xFF) << 24) | ((uint8_t)(h & 0xFF) << 16) |
-  //       ((uint8_t)(fx & 0xFF) << 8) | (uint8_t)fy & 0xFF;
+  s.y = ((uint8_t)((w * 8) & 0xFF) << 24) | ((uint8_t)((h * 8) & 0xFF) << 16) |
+        ((uint8_t)(flipx & 0xFF) << 8) | (uint8_t)(flipy & 0xFF);
   sprite_batch[sprite_batch_count++] = s;
 }
 
-void print(const char* str, int x, int y) {
+void print(const char* str, int x, int y, uint8_t c = 7) {
+  palt();
+  pal(7, c);
   for (const char* c = str; *c; ++c) {
     spr(static_cast<int>(*c) - 256, x, y);
     x += VOX_SPRITE_WIDTH / 2;
@@ -369,22 +404,23 @@ void draw() {
 
   glUniformMatrix4fv(glGetUniformLocation(shader, "proj"), 1, GL_FALSE, glm::value_ptr(proj));
   glUniform3fv(glGetUniformLocation(shader, "palette"), 16, glm::value_ptr(spalette[0]));
-  glUniform1iv(glGetUniformLocation(shader, "alphaMap"), 16, salpha_map);
-  glUniform1iv(glGetUniformLocation(shader, "colorMap"), 16, scolor_map);
+  palt();
+  pal();
 
-#if 0
-  for (int i = 0; i < 4000; ++i) {
-    spr(34 + rnd() % (48 - 33), rnd() % 128, rnd() % 128);
+  palt(14, true);
+#if 1
+  for (int i = 0; i < 5; ++i) {
+    spr(16 * 5 + rnd() % 8, rnd() % 128, rnd() % 128);
   }
+
+  print("hello my name is mike!", 0, 8, 8);
 
 #else
   print("hello my name is mike!", 0, 8);
-  spr(16 * 6, 0, 0);
+  spr(16 * 6, 0, 0, 1, 1, false, true);
 #endif
 
-  if (sprite_batch_count > 0) {
-    flush();
-  }
+  flush();
 }
 
 void on_debug_message(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
