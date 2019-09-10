@@ -351,30 +351,55 @@ void palt(int c, bool t) {
   glUniform1iv(glGetUniformLocation(shader, "alphaMap"), 16, salpha_map);
 }
 
-void spr(int n, int x, int y, int w = 1, int h = 1, bool flipx = false, bool flipy = false) {
+void sspr_raw(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, bool flipx = false,
+              bool flipy = false) {
   if (sprite_batch_count >= VOX_MAX_SPRITE_BATCH) {
     flush();
   }
-  if (w < 0) w = 0;
-  if (h < 0) h = 0;
-  if (w > 16) w = 16;
-  if (h > 16) h = 16;
+
+  if (flipx) dw = -dw;
+  if (flipy) dh = -dh;
 
   glm::uvec2 s;
-  // n, x, y
-  s.x = ((uint16_t)((n + 256) & 0xFFFF) << 16) | ((uint8_t)(x + 128) & 0xFF) << 8 |
-        ((uint8_t)(y + 128) & 0xFF);
-  // w, h, fx, fy
-  s.y = ((uint8_t)((w * 8) & 0xFF) << 24) | ((uint8_t)((h * 8) & 0xFF) << 16) |
-        ((uint8_t)(flipx & 0xFF) << 8) | (uint8_t)(flipy & 0xFF);
+  s.x = (((uint8_t)(sx + 128) & 0xFF) << 24) | (((uint8_t)(sy + 128) & 0xFF) << 16) |
+        (((uint8_t)(sw + 128) & 0xFF) << 8) | (((uint8_t)(sh + 128) & 0xFF) << 0);
+  s.y = (((uint8_t)(dx + 128) & 0xFF) << 24) | (((uint8_t)(dy + 128) & 0xFF) << 16) |
+        (((uint8_t)(dw + 128) & 0xFF) << 8) | (((uint8_t)(dh + 128) & 0xFF) << 0);
+
   sprite_batch[sprite_batch_count++] = s;
 }
+
+void sspr(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, bool flipx = false,
+          bool flipy = false) {
+  sspr_raw(sx, sy, sw, sh, dx, dy + VOX_SPRITES_WIDTH, dw, dh, flipx, flipy);
+}
+
+void sspr(int sx, int sy, int sw, int sh, int dx, int dy) { sspr(sx, sy, sw, sh, dx, dy, sw, sh); }
+
+void spr(int n, int x, int y, int w = 1, int h = 1, bool flipx = false, bool flipy = false) {
+  if (w < 0) w = 0;
+  if (h < 0) h = 0;
+  if (w > VOX_SPRITES_COUNT) w = VOX_SPRITES_COUNT;
+  if (h > VOX_SPRITES_COUNT) h = VOX_SPRITES_COUNT;
+
+  int nx = (n % VOX_SPRITES_COUNT) * VOX_SPRITE_WIDTH;
+  int ny = (n / VOX_SPRITES_COUNT) * VOX_SPRITE_WIDTH;
+
+  w *= VOX_SPRITE_WIDTH;
+  h *= VOX_SPRITE_WIDTH;
+
+  sspr(x, y, w, h, nx, ny, w, h, flipx, flipy);
+}
+
+void rect(int x0, int y0, int x1, int y1) { sspr_raw(x0, y0, x1 - x0, y1 - y0, 0, 0, 8, 8); }
 
 void print(const char* str, int x, int y, uint8_t c = 7) {
   palt();
   pal(7, c);
   for (const char* c = str; *c; ++c) {
-    spr(static_cast<int>(*c) - 256, x, y);
+    int nx = (*c % VOX_SPRITES_COUNT) * VOX_SPRITE_WIDTH;
+    int ny = (*c / VOX_SPRITES_COUNT) * VOX_SPRITE_WIDTH;
+    sspr_raw(x, y, VOX_SPRITE_WIDTH, VOX_SPRITE_WIDTH, nx, ny, VOX_SPRITE_WIDTH, VOX_SPRITE_WIDTH);
     x += VOX_SPRITE_WIDTH / 2;
   }
 }
@@ -409,15 +434,17 @@ void draw() {
 
   palt(14, true);
 #if 1
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < 4000; ++i) {
     spr(16 * 5 + rnd() % 8, rnd() % 128, rnd() % 128);
   }
 
   print("hello my name is mike!", 0, 8, 8);
-
 #else
-  print("hello my name is mike!", 0, 8);
-  spr(16 * 6, 0, 0, 1, 1, false, true);
+  // print("hello my name is mike!", 0, 8);
+  // sspr_raw(0, 0, 8, 8, 0, 0, 8, 8);
+  // spr(16 * 6, 0, 0, 1, 1, false, true);
+  // spr(16 * 6, 0, 0);
+  // sspr(0, 0, 16, 16, 0, 8, 8, 8, true);
 #endif
 
   flush();
