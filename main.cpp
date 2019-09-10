@@ -18,6 +18,12 @@ bool init() { return sprites_init(&sprites); }
 
 void flush() { sprites_flush(&sprites); }
 
+void cls(int c = 0) {
+  glClearColor(shader_palette[c].r, shader_palette[c].g, shader_palette[c].b, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glScissor(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
+}
+
 void pal() {
   flush();
   for (int i = 0; i < 16; ++i) {
@@ -75,12 +81,6 @@ void print(const char* str, int x, int y, uint8_t c = 7) {
   }
 }
 
-void cls(int c = 0) {
-  glClearColor(shader_palette[c].r, shader_palette[c].g, shader_palette[c].b, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT);
-  glScissor(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
-}
-
 uint64_t rnd() {
   static uint64_t wyhash64_x;
   wyhash64_x += 0x60bee2bee120fc15;
@@ -114,8 +114,6 @@ void draw() {
   // spr(16 * 6, 0, 0);
   // sspr(0, 0, 16, 16, 0, 8, 8, 8, true);
 #endif
-
-  flush();
 }
 
 void on_debug_message(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
@@ -137,7 +135,8 @@ int main(int argc, char* argv[]) {
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 
   SDL_Window* window = SDL_CreateWindow("Vox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                        800, 800, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+                                        VOX_DEFAULT_SCREEN_WIDTH, VOX_DEFAULT_SCREEN_HEIGHT,
+                                        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
   if (!window) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to create window: %s", SDL_GetError());
     return 1;
@@ -156,7 +155,7 @@ int main(int argc, char* argv[]) {
 
   bool is_running = init();
 
-  screen_rect = screen_calc_rect(800, 800);
+  screen_rect = screen_calc_rect(VOX_DEFAULT_SCREEN_WIDTH, VOX_DEFAULT_SCREEN_HEIGHT);
   glViewport(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
 
   while (is_running) {
@@ -178,13 +177,13 @@ int main(int argc, char* argv[]) {
       }
     }
 
-    update();
-
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
 
     glEnable(GL_SCISSOR_TEST);
+    update();
     draw();
+    flush();
     glDisable(GL_SCISSOR_TEST);
 
     SDL_GL_SwapWindow(window);

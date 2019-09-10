@@ -1,6 +1,9 @@
 #ifndef VOX_H
 #define VOX_H
 
+#define VOX_DEFAULT_SCREEN_WIDTH 800
+#define VOX_DEFAULT_SCREEN_HEIGHT 800
+
 #define VOX_WIDTH 128 // Must be a power of 2
 #define VOX_PADDING 8
 
