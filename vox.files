@@ -1,3 +1,14 @@
+color.cpp
+color.h
+image.cpp
+image.h
 main.cpp
+screen.cpp
+screen.hpp
+shader.cpp
+shader.h
 sprite.frag
 sprite.vert
+sprites.cpp
+sprites.h
+vox.h
