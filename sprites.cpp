@@ -133,10 +133,10 @@ void sprites_draw(Sprites* sprites, int sx, int sy, int sw, int sh, int dx, int 
   if (flipy) dh = -dh;
 
   glm::uvec2 s;
-  s.x = (((uint8_t)(sx + 128) & 0xFF) << 24) | (((uint8_t)(sy + 128) & 0xFF) << 16) |
-        (((uint8_t)(sw + 128) & 0xFF) << 8) | (((uint8_t)(sh + 128) & 0xFF) << 0);
-  s.y = (((uint8_t)(dx + 128) & 0xFF) << 24) | (((uint8_t)(dy + 128) & 0xFF) << 16) |
-        (((uint8_t)(dw + 128) & 0xFF) << 8) | (((uint8_t)(dh + 128) & 0xFF) << 0);
+  s.x = (((uint8_t)(sx + 127) & 0xFF) << 24) | (((uint8_t)(sy + 127) & 0xFF) << 16) |
+        (((uint8_t)(sw + 127) & 0xFF) << 8) | (((uint8_t)(sh + 127) & 0xFF) << 0);
+  s.y = (((uint8_t)(dx + 127) & 0xFF) << 24) | (((uint8_t)(dy + 127) & 0xFF) << 16) |
+        (((uint8_t)(dw + 127) & 0xFF) << 8) | (((uint8_t)(dh + 127) & 0xFF) << 0);
 
   sprites->batch[sprites->batch_count++] = s;
 }

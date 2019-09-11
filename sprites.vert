@@ -14,15 +14,15 @@ const float SPRITE_TEX_WIDTH = 128.0;
 const float SPRITE_TEX_HEIGHT = 256.0;
 
 void main() {
-  float sx = float((params.x >> 24u) & 0xFFu) - 128;
-  float sy = float((params.x >> 16u) & 0xFFu) - 128;
-  float sw = float((params.x >> 8u) & 0xFFu) - 128;
-  float sh = float((params.x) & 0xFFu) - 128;
+  float sx = float((params.x >> 24u) & 0xFFu) - 127;
+  float sy = float((params.x >> 16u) & 0xFFu) - 127;
+  float sw = float((params.x >> 8u) & 0xFFu) - 127;
+  float sh = float((params.x) & 0xFFu) - 127;
 
-  float dx = float((params.y >> 24u) & 0xFFu) - 128;
-  float dy = float((params.y >> 16u) & 0xFFu) - 128;
-  float dw = float((params.y >> 8u) & 0xFFu) - 128;
-  float dh = float((params.y) & 0xFFu) - 128;
+  float dx = float((params.y >> 24u) & 0xFFu) - 127;
+  float dy = float((params.y >> 16u) & 0xFFu) - 127;
+  float dw = float((params.y >> 8u) & 0xFFu) - 127;
+  float dh = float((params.y) & 0xFFu) - 127;
 
   float texx = dw < 0 ? 1 - tex.x : tex.x;
   float texy = dh < 0 ? 1 - tex.y : tex.y;

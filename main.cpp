@@ -13,16 +13,12 @@
 #include <glm/glm.hpp>
 
 static Sprites sprites;
-static Lines lines;
+static Quads lines;
 static SDL_Rect screen_rect;
 
-// bool init() { return sprites_init(&sprites) && lines_init(&lines); }
-bool init() { return lines_init(&lines); }
+bool init() { return sprites_init(&sprites); }
 
-void flush() {
-  lines_flush(&lines); // FIXME: Incorrect ordering
-  // sprites_flush(&sprites);
-}
+void flush() { sprites_flush(&sprites); }
 
 void cls(int c = 0) {
   glClearColor(shader_palette[c].r, shader_palette[c].g, shader_palette[c].b, 1.0f);
@@ -75,7 +71,9 @@ void spr(int n, int x, int y, int w = 1, int h = 1, bool flipx = false, bool fli
   sspr(x, y, w, h, nx, ny, w, h, flipx, flipy);
 }
 
-void line(int x0, int y0, int x1, int y1, int c = 7) { lines_draw(&lines, x0, y0, x1, y1, c); }
+void rect(int x0, int y0, int x1, int y1, int c = 7) {
+  sprites_draw(&sprites, x0, y0, x1 - x0, y1 - y0, 0, 0, 8, 8);
+}
 
 void print(const char* str, int x, int y, uint8_t c = 7) {
   palt();
@@ -116,7 +114,23 @@ void draw() {
 
   print("HELLO MY NAME IS MIKE!", 0, 8, 8);
 #else
-  line(0, 0, 32, 32);
+
+  // int lastx = rnd() % 128, lasty = rnd() % 128;
+  // for (int i = 0; i < 10000; ++i) {
+  //  int nextx = rnd() % 128, nexty = rnd() % 128;
+  //  line(lasty, lasty, nextx, nexty, rnd() % 15 + 1);
+  //  lastx = nextx;
+  //  lasty = nexty;
+  //}
+  // line(0, 0, 32, 32);
+
+  // rect(0, 0, 32, 32);
+
+  for (int i = 0; i < 100; ++i) {
+    int nextx = rnd() % 128, nexty = rnd() % 128;
+    rect(nextx, nexty, nextx + 1, nexty + 1, rnd() % 15 + 1);
+  }
+
   // print("hello my name is mike!", 0, 8);
   // sspr_raw(0, 0, 8, 8, 0, 0, 8, 8);
   // spr(16 * 6, 0, 0, 1, 1, false, true);
@@ -166,6 +180,7 @@ int main(int argc, char* argv[]) {
 
   screen_rect = screen_calc_rect(VOX_DEFAULT_SCREEN_WIDTH, VOX_DEFAULT_SCREEN_HEIGHT);
   glViewport(screen_rect.x, screen_rect.y, screen_rect.w, screen_rect.h);
+  glLineWidth(8.0);
 
   while (is_running) {
     SDL_Event event;
