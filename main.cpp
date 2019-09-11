@@ -1,5 +1,6 @@
 #include "color.h"
 #include "image.h"
+#include "lines.h"
 #include "screen.hpp"
 #include "shader.h"
 #include "sprites.h"
@@ -12,11 +13,16 @@
 #include <glm/glm.hpp>
 
 static Sprites sprites;
+static Lines lines;
 static SDL_Rect screen_rect;
 
-bool init() { return sprites_init(&sprites); }
+// bool init() { return sprites_init(&sprites) && lines_init(&lines); }
+bool init() { return lines_init(&lines); }
 
-void flush() { sprites_flush(&sprites); }
+void flush() {
+  lines_flush(&lines); // FIXME: Incorrect ordering
+  // sprites_flush(&sprites);
+}
 
 void cls(int c = 0) {
   glClearColor(shader_palette[c].r, shader_palette[c].g, shader_palette[c].b, 1.0f);
@@ -69,6 +75,8 @@ void spr(int n, int x, int y, int w = 1, int h = 1, bool flipx = false, bool fli
   sspr(x, y, w, h, nx, ny, w, h, flipx, flipy);
 }
 
+void line(int x0, int y0, int x1, int y1, int c = 7) { lines_draw(&lines, x0, y0, x1, y1, c); }
+
 void print(const char* str, int x, int y, uint8_t c = 7) {
   palt();
   pal(7, c);
@@ -101,13 +109,14 @@ void draw() {
   pal();
 
   palt(14, true);
-#if 1
+#if 0
   for (int i = 0; i < 4000; ++i) {
     spr(16 * 5 + rnd() % 8, rnd() % 128, rnd() % 128);
   }
 
-  print("hello my name is mike!", 0, 8, 8);
+  print("HELLO MY NAME IS MIKE!", 0, 8, 8);
 #else
+  line(0, 0, 32, 32);
   // print("hello my name is mike!", 0, 8);
   // sspr_raw(0, 0, 8, 8, 0, 0, 8, 8);
   // spr(16 * 6, 0, 0, 1, 1, false, true);

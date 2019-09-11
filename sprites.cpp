@@ -37,7 +37,7 @@ bool sprites_load_texture(Sprites* sprites, const char* filename, bool is_system
 }
 
 bool sprites_load_shader(Sprites* sprites) {
-  sprites->shader = shader_load("sprite");
+  sprites->shader = shader_load("sprites");
   return sprites->shader != VOX_ERROR;
 }
 

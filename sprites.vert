@@ -8,7 +8,6 @@ layout (location = 2) in uvec2 params;
 
 uniform mat4 proj;
 
-out vec3 Color;
 out vec2 TexCoord;
 
 const float SPRITE_TEX_WIDTH = 128.0;
