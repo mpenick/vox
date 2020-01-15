@@ -137,16 +137,109 @@ uint64_t rnd() {
 
 Quads quads;
 
+void pset(int x, int y, int c) { quads_draw(&quads, x, y, x + 1, y + 1, c); }
+
+void line(int x0, int y0, int x1, int y1, int c = 7) {
+  int dx = x1 - x0;
+  int dy = y1 - y0;
+
+  int d = 2 * dy - dx;
+  int y = y0;
+
+  for (int x = x0; x <= x1; ++x) {
+    pset(x, y, c);
+    quads_draw(&quads, x, y, x + 1, y + 1, 7);
+    if (d > 0) {
+      y++;
+      d = d - 2 * dx;
+    }
+    d = d + 2 * dy;
+  }
+}
+
+void circ_draw(int cx, int cy, int x, int y, int c) {
+  pset(cx + x, cy + y, c);
+  pset(cx - x, cy + y, c);
+  pset(cx + x, cy - y, c);
+  pset(cx - x, cy - y, c);
+  pset(cx + y, cy + x, c);
+  pset(cx - y, cy + x, c);
+  pset(cx + y, cy - x, c);
+  pset(cx - y, cy - x, c);
+}
+
+void circ(int cx, int cy, int r, int c = 7) {
+  int x = 0, y = r;
+  int d = 3 - 2 * r;
+  circ_draw(cx, cy, x, y, c);
+  while (y >= x) {
+    x++;
+    if (d > 0) {
+      y--;
+      d = d + 4 * (x - y) + 10;
+    } else
+      d = d + 4 * x + 6;
+    circ_draw(cx, cy, x, y, c);
+  }
+}
+
+void circfill_draw(int cx, int cy, int x, int y, int c) {
+  line(cx - x, cy + y, cx + x, cy + y, c);
+  line(cx - x, cy - y, cx + x, cy - y, c);
+  line(cx - y, cy + x, cx + y, cy + x, c);
+  line(cx - y, cy - x, cx + y, cy - x, c);
+}
+
+void circfill(int cx, int cy, int r, int c = 7) {
+  int x = 0, y = r;
+  int d = 3 - 2 * r;
+  circfill_draw(cx, cy, x, y, c);
+  while (y >= x) {
+    x++;
+    if (d > 0) {
+      y--;
+      d = d + 4 * (x - y) + 10;
+    } else
+      d = d + 4 * x + 6;
+    circfill_draw(cx, cy, x, y, c);
+  }
+}
+
+void rect(int x0, int y0, int x1, int y1, int c = 7) {
+  quads_draw(&quads, x0 + 1, y0, x1 - 1, y0 + 1, c); // top
+  quads_draw(&quads, x0, y0, x0 + 1, y1 + 1, c);     // right
+  quads_draw(&quads, x1 - 1, y0, x1, y1 + 1, c);     // left
+  quads_draw(&quads, x0 + 1, y1, x1 - 1, y1 + 1, c); // bottom
+}
+
+void rectfill(int x0, int y0, int x1, int y1, int c = 7) { quads_draw(&quads, x0, y0, x1, y1, c); }
+
 bool init() { return quads_init(&quads); }
 
 void draw() {
   // quads_draw(&quads, 0, 0, 32, 32, 8);
   // quads_draw(&quads, 32, 32, 32 + 48, 48, 7);
 
+  /*
   for (int i = 0; i < 100000; ++i) {
     int nextx = rnd() % 128, nexty = rnd() % 128;
     quads_draw(&quads, nextx, nexty, nextx + 1, nexty + 1, rnd() % 15 + 1);
   }
+  */
+
+  // line(0, 0, 32, 5);
+
+  // circfill(32, 32, 32);
+
+  // for (int i = 0; i < 10; ++i) {
+  //  circ(32 + rnd() % 32, 32 + rnd() % 32, rnd() % 30, rnd() % 15 + 1);
+  //}
+
+  rect(0, 0, 32, 32, 9);
+  rectfill(0, 34, 32, 66);
+
+  circ(15, 15, 10);
+  circfill(15, 15, 4);
 
   quads_flush(&quads);
 }

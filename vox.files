@@ -14,7 +14,6 @@ image.cpp
 image.h
 image.h
 lines.cpp
-lines.cpp
 lines.frag
 lines.h
 lines.h

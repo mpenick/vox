@@ -1,6 +1,5 @@
 #include "color.h"
 #include "image.h"
-#include "lines.h"
 #include "screen.hpp"
 #include "shader.h"
 #include "sprites.h"
@@ -13,7 +12,6 @@
 #include <glm/glm.hpp>
 
 static Sprites sprites;
-static Quads lines;
 static SDL_Rect screen_rect;
 
 bool init() { return sprites_init(&sprites); }
@@ -72,7 +70,18 @@ void spr(int n, int x, int y, int w = 1, int h = 1, bool flipx = false, bool fli
 }
 
 void rect(int x0, int y0, int x1, int y1, int c = 7) {
-  sprites_draw(&sprites, x0, y0, x1 - x0, y1 - y0, 0, 0, 8, 8);
+  int w = (x1 - x0) + 1;
+  int h = (y1 - y0) + 1;
+  sprites_draw(&sprites, x0, y0, w, 1, 0, 0, 8, 8); // Top
+  sprites_draw(&sprites, x0, y1, w, 1, 0, 0, 8, 8); // Bottom
+  sprites_draw(&sprites, x0, y0, 1, h, 0, 0, 8, 8); // Left
+  sprites_draw(&sprites, x1, 0, 1, h, 0, 0, 8, 8);  // Right
+}
+
+void rectfill(int x0, int y0, int x1, int y1, int c = 7) {
+  int w = (x1 - x0) + 1;
+  int h = (y1 - y0) + 1;
+  sprites_draw(&sprites, x0, y0, w, h, 0, 0, 8, 8);
 }
 
 void print(const char* str, int x, int y, uint8_t c = 7) {
@@ -106,8 +115,8 @@ void draw() {
   palt();
   pal();
 
-  palt(14, true);
 #if 0
+  palt(14, true);
   for (int i = 0; i < 4000; ++i) {
     spr(16 * 5 + rnd() % 8, rnd() % 128, rnd() % 128);
   }
@@ -124,12 +133,15 @@ void draw() {
   //}
   // line(0, 0, 32, 32);
 
-  // rect(0, 0, 32, 32);
+  rect(0, 0, 8, 8);
+  rectfill(0, 24, 8, 24 + 8);
 
-  for (int i = 0; i < 100; ++i) {
+  /*
+  for (int i = 0; i < 100000; ++i) {
     int nextx = rnd() % 128, nexty = rnd() % 128;
     rect(nextx, nexty, nextx + 1, nexty + 1, rnd() % 15 + 1);
   }
+  */
 
   // print("hello my name is mike!", 0, 8);
   // sspr_raw(0, 0, 8, 8, 0, 0, 8, 8);

@@ -123,6 +123,12 @@ void sprites_flush(Sprites* sprites) {
   }
 }
 
+int clamp(int v) {
+  if (v < -128) return -128;
+  if (v >= 128) return 128;
+  return v;
+}
+
 void sprites_draw(Sprites* sprites, int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh,
                   bool flipx, bool flipy) {
   if (sprites->batch_count >= VOX_MAX_SPRITE_BATCH) {
@@ -132,11 +138,15 @@ void sprites_draw(Sprites* sprites, int sx, int sy, int sw, int sh, int dx, int 
   if (flipx) dw = -dw;
   if (flipy) dh = -dh;
 
+  sx = clamp(sx);
+  sy = clamp(sy);
+  sw = clamp(sw);
+  sh = clamp(sh);
+
   glm::uvec2 s;
   s.x = (((uint8_t)(sx + 127) & 0xFF) << 24) | (((uint8_t)(sy + 127) & 0xFF) << 16) |
         (((uint8_t)(sw + 127) & 0xFF) << 8) | (((uint8_t)(sh + 127) & 0xFF) << 0);
   s.y = (((uint8_t)(dx + 127) & 0xFF) << 24) | (((uint8_t)(dy + 127) & 0xFF) << 16) |
         (((uint8_t)(dw + 127) & 0xFF) << 8) | (((uint8_t)(dh + 127) & 0xFF) << 0);
-
   sprites->batch[sprites->batch_count++] = s;
 }
